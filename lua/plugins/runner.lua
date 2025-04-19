@@ -83,8 +83,8 @@ return {
       end, { desc = "Toggle runner terminal" })
 
       -- Exit terminal mode safely
-      vim.keymap.set("t", "<Esc>", [[<C-\><C-n>]], { silent = true, noremap = true })
-      vim.keymap.set("t", "jj", [[<C-\><C-n>]], { silent = true, noremap = true })
+      vim.keymap.set("t", "<Esc>", [[<C-\><C-n>]], { silent = true, noremap = true, desc = "Exit terminal with <Esc>" })
+      vim.keymap.set("t", "jj", [[<C-\><C-n>]], { silent = true, noremap = true, desc = "Exit terminal with <jj>" })
     end,
   },
 }

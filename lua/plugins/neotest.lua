@@ -25,11 +25,11 @@ return {
 		-- Keymaps
 		vim.keymap.set("n", "<leader>tn", function()
 			neotest.run.run()
-		end, { desc = "Run nearest test" })
+		end, { desc = "Run nearest test to cursor" })
 
 		vim.keymap.set("n", "<leader>tf", function()
 			neotest.run.run(vim.fn.expand("%"))
-		end, { desc = "Run test file" })
+		end, { desc = "Run entire test file" })
 
 		vim.keymap.set("n", "<leader>ta", function()
 			neotest.run.run(vim.fn.getcwd())
@@ -38,8 +38,5 @@ return {
 		vim.keymap.set("n", "<leader>ts", function()
 			neotest.summary.toggle()
 		end, { desc = "Toggle test summary" })
-
-    -- vim.keymap.set("n", "<leader>mj", function()
-    -- This will be maven testing eventually
 	end,
 }
