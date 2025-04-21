@@ -32,6 +32,11 @@ return {
         return relative:gsub("%.java$", ""):gsub("/", ".")
       end
 
+      local function get_neotree_root()
+        local state = require("neo-tree.sources.manager").get_state("filesystem")
+        return state and state.path or vim.fn.getcwd()
+      end
+
       local function run_file_in_terminal(filepath, cmd)
         local existing = file_to_term[filepath]
         if existing then
@@ -46,6 +51,7 @@ return {
 
         local term = Terminal:new({
           count = next_run_id,
+          dir = get_neotree_root(),
           direction = "horizontal",
           hidden = true,
           close_on_exit = false,
@@ -89,7 +95,7 @@ return {
       for i = 1, 5 do
         vim.keymap.set("n", "<leader>y" .. i, function()
           if not static_terms[i] then
-            static_terms[i] = Terminal:new({ count = i, direction = "horizontal", hidden = true, close_on_exit = false })
+            static_terms[i] = Terminal:new({ count = i, dir = get_neotree_root(), direction = "horizontal", hidden = true, close_on_exit = false })
           end
           static_terms[i]:toggle()
         end, { desc = "Toggle terminal " .. i })
@@ -99,6 +105,7 @@ return {
       vim.keymap.set("n", "<leader>yn", function()
         local term = Terminal:new({
           count = next_term_id,
+          dir = get_neotree_root(),
           direction = "horizontal",
           hidden = true,
           close_on_exit = false,
@@ -113,7 +120,7 @@ return {
       vim.keymap.set("n", "<leader>bn", ":bnext<CR>", { silent = true, desc = "Next buffer" })
       vim.keymap.set("n", "<leader>bp", ":bprev<CR>", { silent = true, desc = "Previous buffer" })
 
-      vim.keymap.set("n", "<leader>yl", function()
+            vim.keymap.set("n", "<leader>yl", function()
         local term_set = {}
         for _, t in pairs(require("toggleterm.terminal").get_all()) do
           term_set[t.id] = t
@@ -121,8 +128,10 @@ return {
         for _, t in pairs(file_to_term) do
           term_set[t.id] = t
         end
-        for _, t in pairs(static_terms) do
-          term_set[t.id] = t
+        for id, t in pairs(static_terms) do
+          if t and vim.api.nvim_buf_is_valid(t.bufnr) then
+            term_set[t.id] = t
+          end
         end
         local terms = {}
         for _, term in pairs(term_set) do
@@ -135,12 +144,13 @@ return {
         end
 
         local pick_entries = {}
-        for _, term in ipairs(terms) do
+        for index, term in ipairs(terms) do
           table.insert(pick_entries, {
             display = "Terminal " .. term.id,
             ordinal = tostring(term.id),
             id = term.id,
             terminal = term,
+            index = index,
           })
         end
 
@@ -150,7 +160,8 @@ return {
         local action_state = require("telescope.actions.state")
         local conf = require("telescope.config").values
 
-        pickers.new({}, {
+        local picker
+        picker = pickers.new({}, {
           prompt_title = "ToggleTerm Terminals",
           finder = finders.new_table({
             results = pick_entries,
@@ -172,7 +183,6 @@ return {
 
             local delete_term = function()
               local selection = action_state.get_selected_entry()
-              actions.close(prompt_bufnr)
               vim.api.nvim_buf_delete(selection.value.terminal.bufnr, { force = true })
               vim.notify("Closed terminal " .. selection.value.id)
               for path, term in pairs(file_to_term) do
@@ -185,6 +195,21 @@ return {
                   static_terms[id] = nil
                 end
               end
+              table.remove(pick_entries, selection.index)
+              if #pick_entries == 0 then
+                actions.close(prompt_bufnr)
+              else
+                picker:refresh(finders.new_table({
+                  results = pick_entries,
+                  entry_maker = function(entry)
+                    return {
+                      value = entry,
+                      display = entry.display,
+                      ordinal = entry.ordinal,
+                    }
+                  end,
+                }), { reset_prompt = true })
+              end
             end
 
             map("i", "<C-d>", delete_term)
@@ -192,7 +217,9 @@ return {
 
             return true
           end,
-        }):find()
+        })
+
+        picker:find()
       end, { desc = "List terminals with Telescope" })
     end,
   },
