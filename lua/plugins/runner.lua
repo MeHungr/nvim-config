@@ -1,7 +1,9 @@
+
 return {
   {
     "akinsho/toggleterm.nvim",
     version = "*",
+    dependencies = { "nvim-telescope/telescope.nvim" },
     config = function()
       local toggleterm = require("toggleterm")
       toggleterm.setup({
@@ -16,8 +18,10 @@ return {
       })
 
       local Terminal = require("toggleterm.terminal").Terminal
+      local file_to_term = {}
+      local static_terms = {}
+      local next_run_id = 100
 
-      -- Utility: determine Java main class from src/main/java
       local function get_main_class()
         local filepath = vim.fn.expand("%:p")
         local root = filepath:match("(.-src/main/java/)")
@@ -29,63 +33,152 @@ return {
         return relative:gsub("%.java$", ""):gsub("/", ".")
       end
 
-      -- Shared terminal instance
-      local runner = Terminal:new({
-        direction = "horizontal",
-        close_on_exit = false,
-        hidden = true,
-      })
+      local function run_file_in_terminal(filepath, cmd)
+        local existing = file_to_term[filepath]
+        if existing then
+          if vim.api.nvim_buf_is_valid(existing.bufnr) then
+            existing:toggle()
+            vim.fn.chansend(existing.job_id, "clear\n" .. cmd .. "\n")
+            return
+          else
+            file_to_term[filepath] = nil
+          end
+        end
 
-      -- Run current file (non-Java)
+        local term = Terminal:new({
+          count = next_run_id,
+          direction = "horizontal",
+          hidden = true,
+          close_on_exit = false,
+        })
+        next_run_id = next_run_id + 1
+        file_to_term[filepath] = term
+        term:toggle()
+        vim.fn.chansend(term.job_id, "clear\n" .. cmd .. "\n")
+      end
+
       vim.keymap.set("n", "<leader>rr", function()
         local ft = vim.bo.filetype
-        local file = vim.fn.expand("%")
-        local name = vim.fn.expand("%:t:r")
-
+        local file = vim.fn.expand("%:p")
         local cmd = ({
           python = "python3 " .. file,
           go = "go run " .. file,
           lua = "lua " .. file,
           sh = "bash " .. file,
         })[ft]
-
         if not cmd then
           vim.notify("No run command for filetype: " .. ft, vim.log.levels.WARN)
           return
         end
-
-        if not runner:is_open() then runner:open() end
-        vim.fn.chansend(runner.job_id, "clear\n")
-        vim.fn.chansend(runner.job_id, cmd .. "\n")
+        run_file_in_terminal(file, cmd)
       end, { desc = "Run current file" })
 
-      -- Java exec:java
       vim.keymap.set("n", "<leader>rje", function()
         local main_class = get_main_class()
         if not main_class then return end
-        if not runner:is_open() then runner:open() end
-        vim.fn.chansend(runner.job_id, "clear\n")
-        vim.fn.chansend(runner.job_id, "mvn exec:java -Dexec.mainClass=" .. main_class .. "\n")
-      end, { desc = "Run mvn exec:java" })
+        local file = vim.fn.expand("%:p")
+        run_file_in_terminal(file, "mvn exec:java -Dexec.mainClass=" .. main_class)
+      end, { desc = "Run Java exec:java" })
 
-      -- JavaFX runner
       vim.keymap.set("n", "<leader>rjg", function()
         local main_class = get_main_class()
         if not main_class then return end
-        if not runner:is_open() then runner:open() end
-        vim.fn.chansend(runner.job_id, "clear\n")
-        vim.fn.chansend(runner.job_id, "mvn javafx:run -Djavafx.mainClass=" .. main_class .. "\n")
-      end, { desc = "Run mvn javafx:run" })
+        local file = vim.fn.expand("%:p")
+        run_file_in_terminal(file, "mvn javafx:run -Djavafx.mainClass=" .. main_class)
+      end, { desc = "Run JavaFX" })
 
-      -- Manually toggle the runner terminal
-      vim.keymap.set("n", "<leader>rt", function()
-        runner:toggle()
-      end, { desc = "Toggle runner terminal" })
+      for i = 1, 5 do
+        vim.keymap.set("n", "<leader>y" .. i, function()
+          if not static_terms[i] then
+            static_terms[i] = Terminal:new({ count = i, direction = "horizontal", hidden = true, close_on_exit = false })
+          end
+          static_terms[i]:toggle()
+        end, { desc = "Toggle terminal " .. i })
+      end
 
-      -- Exit terminal mode safely
-      vim.keymap.set("t", "<Esc>", [[<C-\><C-n>]], { silent = true, noremap = true, desc = "Exit terminal with <Esc>" })
-      vim.keymap.set("t", "jj", [[<C-\><C-n>]], { silent = true, noremap = true, desc = "Exit terminal with <jj>" })
+      local next_term_id = 2
+      vim.keymap.set("n", "<leader>yn", function()
+        local term = Terminal:new({
+          count = next_term_id,
+          direction = "horizontal",
+          hidden = true,
+          close_on_exit = false,
+        })
+        next_term_id = next_term_id + 1
+        term:toggle()
+      end, { desc = "Open new dynamic terminal" })
+
+      vim.keymap.set("t", "<Esc>", [[<C-\><C-n>]], { silent = true, noremap = true, desc = "Exit terminal" })
+      vim.keymap.set("t", "jj", [[<C-\><C-n>]], { silent = true, noremap = true, desc = "Exit terminal" })
+
+      vim.keymap.set("n", "<leader>bn", ":bnext<CR>", { silent = true, desc = "Next buffer" })
+      vim.keymap.set("n", "<leader>bp", ":bprev<CR>", { silent = true, desc = "Previous buffer" })
+
+      vim.keymap.set("n", "<leader>yl", function()
+        local terms = require("toggleterm.terminal").get_all()
+        if #terms == 0 then
+          vim.notify("No terminals open", vim.log.levels.INFO)
+          return
+        end
+        local pick_entries = {}
+        for _, term in ipairs(terms) do
+          table.insert(pick_entries, {
+            display = "Terminal " .. term.id,
+            ordinal = tostring(term.id),
+            id = term.id,
+            terminal = term,
+          })
+        end
+        local pickers = require("telescope.pickers")
+        local finders = require("telescope.finders")
+        local actions = require("telescope.actions")
+        local action_state = require("telescope.actions.state")
+        local conf = require("telescope.config").values
+
+        pickers.new({}, {
+          prompt_title = "ToggleTerm Terminals",
+          finder = finders.new_table({
+            results = pick_entries,
+            entry_maker = function(entry)
+              return {
+                value = entry,
+                display = entry.display,
+                ordinal = entry.ordinal,
+              }
+            end,
+          }),
+          sorter = conf.generic_sorter({}),
+          attach_mappings = function(prompt_bufnr, map)
+            actions.select_default:replace(function()
+              local selection = action_state.get_selected_entry()
+              actions.close(prompt_bufnr)
+              selection.value.terminal:toggle()
+            end)
+
+            local delete_term = function()
+              local selection = action_state.get_selected_entry()
+              actions.close(prompt_bufnr)
+              vim.api.nvim_buf_delete(selection.value.terminal.bufnr, { force = true })
+              vim.notify("Closed terminal " .. selection.value.id)
+              for path, term in pairs(file_to_term) do
+                if term.id == selection.value.id then
+                  file_to_term[path] = nil
+                end
+              end
+              for id, term in pairs(static_terms) do
+                if term.id == selection.value.id then
+                  static_terms[id] = nil
+                end
+              end
+            end
+
+            map("i", "<C-d>", delete_term)
+            map("n", "<C-d>", delete_term)
+
+            return true
+          end,
+        }):find()
+      end, { desc = "List terminals with Telescope" })
     end,
   },
 }
-

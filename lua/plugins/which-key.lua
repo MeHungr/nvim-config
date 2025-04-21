@@ -11,6 +11,8 @@ return {
 			{ "<leader>f", group = "find" },
 			{ "<leader>g", group = "formatting" },
 			{ "<leader>c", group = "code" },
+      { "<leader>y", group = "terminal" },
+      { "<leader>b", group = "buffers" },
 		})
 		wk.setup({
       triggers = { "<leader>" },
