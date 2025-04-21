@@ -19,7 +19,9 @@ return {
       local Terminal = require("toggleterm.terminal").Terminal
       local file_to_term = {}
       local static_terms = {}
+      local dynamic_terms = {}
       local next_run_id = 100
+      local next_term_id = 6
 
       local function get_main_class()
         local filepath = vim.fn.expand("%:p")
@@ -58,6 +60,7 @@ return {
         })
         next_run_id = next_run_id + 1
         file_to_term[filepath] = term
+        dynamic_terms[term.id] = term
         term:toggle()
         vim.fn.chansend(term.job_id, "clear\n" .. cmd .. "\n")
       end
@@ -101,7 +104,6 @@ return {
         end, { desc = "Toggle terminal " .. i })
       end
 
-      local next_term_id = 2
       vim.keymap.set("n", "<leader>yn", function()
         local term = Terminal:new({
           count = next_term_id,
@@ -110,6 +112,7 @@ return {
           hidden = true,
           close_on_exit = false,
         })
+        dynamic_terms[next_term_id] = term
         next_term_id = next_term_id + 1
         term:toggle()
       end, { desc = "Open new dynamic terminal" })
@@ -120,7 +123,7 @@ return {
       vim.keymap.set("n", "<leader>bn", ":bnext<CR>", { silent = true, desc = "Next buffer" })
       vim.keymap.set("n", "<leader>bp", ":bprev<CR>", { silent = true, desc = "Previous buffer" })
 
-            vim.keymap.set("n", "<leader>yl", function()
+      vim.keymap.set("n", "<leader>yl", function()
         local term_set = {}
         for _, t in pairs(require("toggleterm.terminal").get_all()) do
           term_set[t.id] = t
@@ -133,6 +136,12 @@ return {
             term_set[t.id] = t
           end
         end
+        for id, t in pairs(dynamic_terms) do
+          if t and vim.api.nvim_buf_is_valid(t.bufnr) then
+            term_set[t.id] = t
+          end
+        end
+
         local terms = {}
         for _, term in pairs(term_set) do
           table.insert(terms, term)
@@ -193,6 +202,11 @@ return {
               for id, term in pairs(static_terms) do
                 if term.id == selection.value.id then
                   static_terms[id] = nil
+                end
+              end
+              for id, term in pairs(dynamic_terms) do
+                if term.id == selection.value.id then
+                  dynamic_terms[id] = nil
                 end
               end
               table.remove(pick_entries, selection.index)
