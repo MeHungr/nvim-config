@@ -1,4 +1,3 @@
-
 return {
   {
     "akinsho/toggleterm.nvim",
@@ -115,11 +114,26 @@ return {
       vim.keymap.set("n", "<leader>bp", ":bprev<CR>", { silent = true, desc = "Previous buffer" })
 
       vim.keymap.set("n", "<leader>yl", function()
-        local terms = require("toggleterm.terminal").get_all()
+        local term_set = {}
+        for _, t in pairs(require("toggleterm.terminal").get_all()) do
+          term_set[t.id] = t
+        end
+        for _, t in pairs(file_to_term) do
+          term_set[t.id] = t
+        end
+        for _, t in pairs(static_terms) do
+          term_set[t.id] = t
+        end
+        local terms = {}
+        for _, term in pairs(term_set) do
+          table.insert(terms, term)
+        end
+
         if #terms == 0 then
           vim.notify("No terminals open", vim.log.levels.INFO)
           return
         end
+
         local pick_entries = {}
         for _, term in ipairs(terms) do
           table.insert(pick_entries, {
@@ -129,6 +143,7 @@ return {
             terminal = term,
           })
         end
+
         local pickers = require("telescope.pickers")
         local finders = require("telescope.finders")
         local actions = require("telescope.actions")
