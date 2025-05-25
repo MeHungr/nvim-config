@@ -22,6 +22,9 @@ vim.api.nvim_set_hl(0, "WhichKeyFloat", { bg = "#1e1e2e", fg = "#cdd6f4" })
 vim.api.nvim_set_hl(0, "WhichKeyBorder", { bg = "#1e1e2e", fg = "#89b4fa" })
 vim.api.nvim_set_hl(0, "WhichKeyTitle", { fg = "#f38ba8", bold = true })
 
+-- Show relative line numbers
+vim.wo.relativenumber = true
+
 vim.o.timeout = true
 vim.o.timeoutlen = 300
 
